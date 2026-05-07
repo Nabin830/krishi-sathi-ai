@@ -1,350 +1,1043 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 
-class MarketAiResult {
-  final bool success;
-  final String marketAiStatus;
-  final String marketAiMessage;
-  final String marketAiMessageNe;
+import 'app_language.dart';
 
-  final String aiMarketTitle;
-  final String aiMarketTitleNe;
-  final String aiMarketRisk;
-  final String aiMarketRiskNe;
-  final String aiMarketSummary;
-  final String aiMarketSummaryNe;
-  final List<String> aiMarketActions;
-  final List<String> aiMarketActionsNe;
+class SellCropScreen extends StatefulWidget {
+  const SellCropScreen({super.key});
 
-  MarketAiResult({
-    required this.success,
-    required this.marketAiStatus,
-    required this.marketAiMessage,
-    required this.marketAiMessageNe,
-    required this.aiMarketTitle,
-    required this.aiMarketTitleNe,
-    required this.aiMarketRisk,
-    required this.aiMarketRiskNe,
-    required this.aiMarketSummary,
-    required this.aiMarketSummaryNe,
-    required this.aiMarketActions,
-    required this.aiMarketActionsNe,
-  });
-
-  factory MarketAiResult.fromJson(Map<String, dynamic> json) {
-    return MarketAiResult(
-      success: json['success'] == true,
-      marketAiStatus: (json['marketAiStatus'] ?? '').toString(),
-      marketAiMessage: (json['marketAiMessage'] ?? '').toString(),
-      marketAiMessageNe: (json['marketAiMessageNe'] ?? '').toString(),
-      aiMarketTitle: (json['aiMarketTitle'] ?? '').toString(),
-      aiMarketTitleNe: (json['aiMarketTitleNe'] ?? '').toString(),
-      aiMarketRisk: (json['aiMarketRisk'] ?? '').toString(),
-      aiMarketRiskNe: (json['aiMarketRiskNe'] ?? '').toString(),
-      aiMarketSummary: (json['aiMarketSummary'] ?? '').toString(),
-      aiMarketSummaryNe: (json['aiMarketSummaryNe'] ?? '').toString(),
-      aiMarketActions: _toStringList(json['aiMarketActions']),
-      aiMarketActionsNe: _toStringList(json['aiMarketActionsNe']),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'success': success,
-      'marketAiStatus': marketAiStatus,
-      'marketAiMessage': marketAiMessage,
-      'marketAiMessageNe': marketAiMessageNe,
-      'aiMarketTitle': aiMarketTitle,
-      'aiMarketTitleNe': aiMarketTitleNe,
-      'aiMarketRisk': aiMarketRisk,
-      'aiMarketRiskNe': aiMarketRiskNe,
-      'aiMarketSummary': aiMarketSummary,
-      'aiMarketSummaryNe': aiMarketSummaryNe,
-      'aiMarketActions': aiMarketActions,
-      'aiMarketActionsNe': aiMarketActionsNe,
-    };
-  }
-
-  static List<String> _toStringList(dynamic value) {
-    if (value is List) {
-      return value
-          .map((item) => item.toString())
-          .where((item) => item.trim().isNotEmpty)
-          .toList();
-    }
-
-    if (value is String && value.trim().isNotEmpty) {
-      return [value.trim()];
-    }
-
-    return [];
-  }
+  @override
+  State<SellCropScreen> createState() => _SellCropScreenState();
 }
 
-class MarketAiService {
-  static String _cleanKey(String value) {
-    return value.trim().toLowerCase();
+class _SellCropScreenState extends State<SellCropScreen> {
+  final TextEditingController _cropNameController = TextEditingController();
+  final TextEditingController _cropNameNeController = TextEditingController();
+  final TextEditingController _quantityController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
+
+  final ImagePicker _picker = ImagePicker();
+
+  bool _isSaving = false;
+  bool _isPickingImage = false;
+
+  Uint8List? _selectedImageBytes;
+
+  String _selectedQuantityUnit = 'kg';
+  String _selectedPriceUnit = 'kg';
+  String _selectedQuality = 'Good';
+
+  final List<String> _quantityUnits = [
+    'kg',
+    'quintal',
+    'ton',
+    'crate',
+    'muri',
+    'dozen',
+    'piece',
+  ];
+
+  final List<String> _priceUnits = [
+    'kg',
+    'quintal',
+    'ton',
+    'crate',
+    'muri',
+    'dozen',
+    'piece',
+  ];
+
+  final List<String> _qualityOptions = ['Excellent', 'Good', 'Average'];
+
+  String _qualityNe(String quality) {
+    if (quality == 'Excellent') return 'उत्कृष्ट';
+    if (quality == 'Average') return 'सामान्य';
+    return 'राम्रो';
   }
 
-  static double _toDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString()) ?? 0;
+  double _toDouble(String value) {
+    return double.tryParse(value.trim()) ?? 0;
   }
 
-  static String _formatPrice(double value) {
-    if (value == value.roundToDouble()) {
-      return value.round().toString();
+  String _formatNumber(String value) {
+    final number = _toDouble(value);
+
+    if (number == number.roundToDouble()) {
+      return number.round().toString();
     }
 
-    return value.toStringAsFixed(2);
+    return number.toStringAsFixed(2);
   }
 
-  static Future<List<Map<String, dynamic>>> _getMatchingMarketPrices({
-    required String cropName,
-    required String cropNameNe,
-    required String unit,
-  }) async {
-    final cropKey = _cleanKey(cropName);
-    final cropNeKey = _cleanKey(cropNameNe);
-    final unitKey = _cleanKey(unit);
-
-    if (cropKey.isEmpty && cropNeKey.isEmpty) {
-      return [];
+  String get _quantityText {
+    if (_quantityController.text.trim().isEmpty) {
+      return AppLanguage.text('Quantity not added', 'मात्रा थपिएको छैन');
     }
 
-    if (unitKey.isEmpty) {
-      return [];
+    return '${_formatNumber(_quantityController.text)} $_selectedQuantityUnit';
+  }
+
+  String get _priceText {
+    if (_priceController.text.trim().isEmpty) {
+      return AppLanguage.text('Price not added', 'मूल्य थपिएको छैन');
     }
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('marketPrices')
-        .where('unit', isEqualTo: unit)
-        .get();
+    return 'Rs. ${_formatNumber(_priceController.text)}/$_selectedPriceUnit';
+  }
 
-    final matches = <Map<String, dynamic>>[];
+  String get _cropDisplayName {
+    if (AppLanguage.isNepali && _cropNameNeController.text.trim().isNotEmpty) {
+      return _cropNameNeController.text.trim();
+    }
 
-    for (final doc in snapshot.docs) {
-      final data = doc.data();
+    if (_cropNameController.text.trim().isNotEmpty) {
+      return _cropNameController.text.trim();
+    }
 
-      final savedCropName = _cleanKey((data['cropName'] ?? '').toString());
-      final savedCropNameNe = _cleanKey((data['cropNameNe'] ?? '').toString());
-      final savedCropKey = _cleanKey((data['cropKey'] ?? '').toString());
-      final savedCropKeyNe = _cleanKey((data['cropKeyNe'] ?? '').toString());
-      final savedUnit = _cleanKey((data['unit'] ?? '').toString());
-      final savedPrice = _toDouble(data['priceValue']);
+    return AppLanguage.text('Crop name', 'बालीको नाम');
+  }
 
-      final sameUnit = savedUnit == unitKey;
+  Future<void> _pickCropImage(ImageSource source) async {
+    if (!mounted) return;
 
-      final sameCrop =
-          savedCropName == cropKey ||
-          savedCropNameNe == cropKey ||
-          savedCropKey == cropKey ||
-          savedCropKeyNe == cropKey ||
-          savedCropName == cropNeKey ||
-          savedCropNameNe == cropNeKey ||
-          savedCropKey == cropNeKey ||
-          savedCropKeyNe == cropNeKey;
+    setState(() {
+      _isPickingImage = true;
+    });
 
-      if (sameCrop && sameUnit && savedPrice > 0) {
-        matches.add(data);
+    try {
+      final image = await _picker.pickImage(
+        source: source,
+        imageQuality: 75,
+        maxWidth: 1200,
+      );
+
+      if (image == null) {
+        return;
+      }
+
+      final bytes = await image.readAsBytes();
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedImageBytes = bytes;
+      });
+    } catch (e) {
+      _showMessage(
+        AppLanguage.text(
+          'Failed to pick image: $e',
+          'फोटो छान्न समस्या भयो: $e',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
       }
     }
-
-    return matches;
   }
 
-  static Future<MarketAiResult> getMarketAiAdvice({
-    required String cropName,
-    required String cropNameNe,
-    required double price,
-    required String unit,
-    required String marketName,
-    required String location,
-    required String trend,
-    required String note,
-  }) async {
-    final cleanCropName = cropName.trim();
-    final cleanCropNameNe = cropNameNe.trim();
-    final cleanUnit = unit.trim();
+  void _showImagePickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFF4F8F3),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: _cardDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppLanguage.text('Preview crop photo', 'बालीको फोटो preview'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  AppLanguage.text(
+                    'Photo upload is currently turned off because Firebase Storage is not enabled.',
+                    'Firebase Storage enable नभएकाले अहिले फोटो upload बन्द छ।',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                _sheetButton(
+                  icon: Icons.camera_alt,
+                  text: AppLanguage.text('Take Photo', 'फोटो खिच्नुहोस्'),
+                  color: Colors.green,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickCropImage(ImageSource.camera);
+                  },
+                ),
+                _sheetButton(
+                  icon: Icons.photo_library,
+                  text: AppLanguage.text(
+                    'Choose from Gallery',
+                    'ग्यालरीबाट छान्नुहोस्',
+                  ),
+                  color: Colors.blue,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickCropImage(ImageSource.gallery);
+                  },
+                ),
+                if (_selectedImageBytes != null)
+                  _sheetButton(
+                    icon: Icons.delete_outline,
+                    text: AppLanguage.text(
+                      'Remove Preview',
+                      'Preview हटाउनुहोस्',
+                    ),
+                    color: Colors.red,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedImageBytes = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-    if (cleanCropName.isEmpty && cleanCropNameNe.isEmpty) {
-      return MarketAiResult(
-        success: false,
-        marketAiStatus: 'missing_crop',
-        marketAiMessage: 'Crop name is missing.',
-        marketAiMessageNe: 'बालीको नाम छैन।',
-        aiMarketTitle: 'Cannot create selling advice',
-        aiMarketTitleNe: 'बिक्री सुझाव बनाउन सकिँदैन',
-        aiMarketRisk: 'Missing crop name',
-        aiMarketRiskNe: 'बालीको नाम छैन',
-        aiMarketSummary:
-            'Please enter a proper crop name before creating selling advice.',
-        aiMarketSummaryNe:
-            'बिक्री सुझाव बनाउनुअघि कृपया सही बालीको नाम लेख्नुहोस्।',
-        aiMarketActions: [
-          'Enter the crop name clearly.',
-          'Use the same crop name when adding market price records.',
-          'Add at least two saved market prices for better comparison.',
-        ],
-        aiMarketActionsNe: [
-          'बालीको नाम स्पष्ट रूपमा लेख्नुहोस्।',
-          'बजार मूल्य थप्दा पनि उही बालीको नाम प्रयोग गर्नुहोस्।',
-          'राम्रो तुलना गर्न कम्तीमा दुईवटा बजार मूल्य रेकर्ड थप्नुहोस्।',
-        ],
+  Widget _sheetButton({
+    required IconData icon,
+    required String text,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon),
+        label: Text(text),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color.withOpacity(0.45)),
+          padding: const EdgeInsets.all(13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Map<String, String>> _uploadCropImage(String userId) async {
+    return {'imageUrl': '', 'imagePath': ''};
+  }
+
+  Future<void> _saveListing() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      _showMessage(
+        AppLanguage.text('You must be logged in', 'तपाईं लगइन भएको हुनुपर्छ'),
       );
+      return;
     }
 
-    if (price <= 0) {
-      return MarketAiResult(
-        success: false,
-        marketAiStatus: 'missing_price',
-        marketAiMessage: 'Price is missing or invalid.',
-        marketAiMessageNe: 'मूल्य छैन वा गलत छ।',
-        aiMarketTitle: 'Cannot create selling advice',
-        aiMarketTitleNe: 'बिक्री सुझाव बनाउन सकिँदैन',
-        aiMarketRisk: 'Missing price',
-        aiMarketRiskNe: 'मूल्य छैन',
-        aiMarketSummary:
-            'Please enter a valid selling price before creating advice.',
-        aiMarketSummaryNe: 'सुझाव बनाउनुअघि कृपया सही बिक्री मूल्य राख्नुहोस्।',
-        aiMarketActions: [
-          'Enter a valid price greater than zero.',
-          'Check the unit carefully.',
-          'Compare with saved market prices before selling.',
-        ],
-        aiMarketActionsNe: [
-          'शून्यभन्दा बढी सही मूल्य राख्नुहोस्।',
-          'एकाइ राम्रोसँग जाँच गर्नुहोस्।',
-          'बेच्नु अघि सेभ गरिएका बजार मूल्यसँग तुलना गर्नुहोस्।',
-        ],
+    final cropName = _cropNameController.text.trim();
+    final cropNameNe = _cropNameNeController.text.trim();
+    final quantityValue = _toDouble(_quantityController.text);
+    final priceValue = _toDouble(_priceController.text);
+    final location = _locationController.text.trim();
+    final contact = _contactController.text.trim();
+    final note = _noteController.text.trim();
+
+    if (cropName.isEmpty) {
+      _showMessage(
+        AppLanguage.text(
+          'Please enter crop name',
+          'कृपया बालीको नाम लेख्नुहोस्',
+        ),
       );
+      return;
     }
 
-    final matches = await _getMatchingMarketPrices(
-      cropName: cleanCropName,
-      cropNameNe: cleanCropNameNe,
-      unit: cleanUnit,
+    if (quantityValue <= 0) {
+      _showMessage(
+        AppLanguage.text(
+          'Please enter valid quantity',
+          'कृपया सही मात्रा लेख्नुहोस्',
+        ),
+      );
+      return;
+    }
+
+    if (priceValue <= 0) {
+      _showMessage(
+        AppLanguage.text(
+          'Please enter valid price',
+          'कृपया सही मूल्य लेख्नुहोस्',
+        ),
+      );
+      return;
+    }
+
+    if (location.isEmpty) {
+      _showMessage(
+        AppLanguage.text('Please enter location', 'कृपया स्थान लेख्नुहोस्'),
+      );
+      return;
+    }
+
+    if (contact.isEmpty) {
+      _showMessage(
+        AppLanguage.text(
+          'Please enter contact number',
+          'कृपया सम्पर्क नम्बर लेख्नुहोस्',
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final imageData = await _uploadCropImage(user.uid);
+
+      await FirebaseFirestore.instance.collection('cropListings').add({
+        'userId': user.uid,
+        'userEmail': user.email,
+
+        'cropName': cropName,
+        'cropNameNe': cropNameNe,
+        'crop': cropName,
+        'name': cropName,
+
+        'quantityValue': quantityValue,
+        'quantityUnit': _selectedQuantityUnit,
+        'quantity':
+            '${_formatNumber(_quantityController.text)} $_selectedQuantityUnit',
+
+        'priceValue': priceValue,
+        'priceUnit': _selectedPriceUnit,
+        'unit': _selectedPriceUnit,
+        'marketPrice': priceValue,
+        'priceEn': priceValue.toString(),
+        'price':
+            'Rs. ${_formatNumber(_priceController.text)}/$_selectedPriceUnit',
+
+        'location': location,
+        'contact': contact,
+
+        'quality': _selectedQuality,
+        'qualityNe': _qualityNe(_selectedQuality),
+
+        'note': note,
+
+        'imageUrl': imageData['imageUrl'],
+        'imagePath': imageData['imagePath'],
+
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      _cropNameController.clear();
+      _cropNameNeController.clear();
+      _quantityController.clear();
+      _priceController.clear();
+      _locationController.clear();
+      _contactController.clear();
+      _noteController.clear();
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedQuantityUnit = 'kg';
+        _selectedPriceUnit = 'kg';
+        _selectedQuality = 'Good';
+        _selectedImageBytes = null;
+      });
+
+      _showMessage(
+        AppLanguage.text(
+          'Crop listing saved successfully ✅',
+          'बाली लिस्टिङ सफलतापूर्वक सेभ भयो ✅',
+        ),
+      );
+    } catch (e) {
+      _showMessage(
+        AppLanguage.text(
+          'Failed to save listing: $e',
+          'लिस्टिङ सेभ गर्न समस्या भयो: $e',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  void dispose() {
+    _cropNameController.dispose();
+    _cropNameNeController.dispose();
+    _quantityController.dispose();
+    _priceController.dispose();
+    _locationController.dispose();
+    _contactController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppLanguage.language,
+      builder: (context, language, child) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF4F8F3),
+          appBar: AppBar(
+            elevation: 0,
+            backgroundColor: Colors.green.shade700,
+            title: Text(
+              AppLanguage.text('Sell Crops', 'बाली बेच्नुहोस्'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _headerCard(),
+                  const SizedBox(height: 16),
+                  _quickHelpCard(),
+                  const SizedBox(height: 16),
+                  _formCard(),
+                  const SizedBox(height: 16),
+                  _previewCard(),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _headerCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.green.shade700, Colors.green.shade400],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.22),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 30,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.shopping_bag, color: Colors.green, size: 34),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppLanguage.text(
+                    'Create Crop Listing',
+                    'बाली लिस्टिङ बनाउनुहोस्',
+                  ),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  AppLanguage.text(
+                    'Add crop details so buyers can contact you directly.',
+                    'बालीको विवरण थप्नुहोस् ताकि खरिदकर्ताले सिधै सम्पर्क गर्न सकून्।',
+                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickHelpCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: _cardDecoration(
+        color: Colors.orange.withOpacity(0.08),
+        borderColor: Colors.orange.withOpacity(0.18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Colors.orange),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              AppLanguage.text(
+                'Photo upload is currently turned off. You can still create crop listings with crop name, price, quantity, location and contact details.',
+                'अहिले फोटो upload बन्द छ। तपाईं अझै पनि बालीको नाम, मूल्य, मात्रा, स्थान र सम्पर्क विवरण राखेर लिस्टिङ बनाउन सक्नुहुन्छ।',
+              ),
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _formCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.photo_camera,
+            title: AppLanguage.text(
+              'Crop photo preview optional',
+              'बाली फोटो preview वैकल्पिक',
+            ),
+          ),
+          const SizedBox(height: 12),
+          _imagePickerBox(),
+          const SizedBox(height: 18),
+          _sectionTitle(
+            icon: Icons.eco,
+            title: AppLanguage.text('Crop details', 'बाली विवरण'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _cropNameController,
+            label: AppLanguage.text('Crop Name', 'बालीको नाम'),
+            icon: Icons.eco,
+            hintText: 'Tomato',
+          ),
+          _field(
+            controller: _cropNameNeController,
+            label: AppLanguage.text(
+              'Crop Name in Nepali optional',
+              'नेपालीमा बालीको नाम वैकल्पिक',
+            ),
+            icon: Icons.language,
+            hintText: 'टमाटर',
+          ),
+          _field(
+            controller: _quantityController,
+            label: AppLanguage.text('Quantity', 'मात्रा'),
+            icon: Icons.scale,
+            keyboardType: TextInputType.number,
+            hintText: '50',
+          ),
+          _dropdownField(
+            label: AppLanguage.text('Quantity Unit', 'मात्राको एकाइ'),
+            value: _selectedQuantityUnit,
+            items: _quantityUnits,
+            icon: Icons.straighten,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedQuantityUnit = value;
+              });
+            },
+          ),
+          _field(
+            controller: _priceController,
+            label: AppLanguage.text('Price', 'मूल्य'),
+            icon: Icons.payments,
+            keyboardType: TextInputType.number,
+            hintText: '80',
+          ),
+          _dropdownField(
+            label: AppLanguage.text('Price Per Unit', 'प्रति एकाइ मूल्य'),
+            value: _selectedPriceUnit,
+            items: _priceUnits,
+            icon: Icons.scale,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedPriceUnit = value;
+              });
+            },
+          ),
+          _dropdownField(
+            label: AppLanguage.text('Crop Quality', 'बाली गुणस्तर'),
+            value: _selectedQuality,
+            items: _qualityOptions,
+            icon: Icons.verified,
+            showNepaliQuality: true,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedQuality = value;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          _sectionTitle(
+            icon: Icons.place,
+            title: AppLanguage.text('Seller details', 'बिक्रेता विवरण'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _locationController,
+            label: AppLanguage.text('Location', 'स्थान'),
+            icon: Icons.location_on,
+            hintText: 'Chitwan',
+          ),
+          _field(
+            controller: _contactController,
+            label: AppLanguage.text('Contact Number', 'सम्पर्क नम्बर'),
+            icon: Icons.phone,
+            keyboardType: TextInputType.phone,
+            hintText: '98XXXXXXXX',
+          ),
+          _field(
+            controller: _noteController,
+            label: AppLanguage.text('Note optional', 'नोट वैकल्पिक'),
+            icon: Icons.note_alt,
+            hintText: AppLanguage.text(
+              'Example: fresh crop, ready today',
+              'उदाहरण: ताजा बाली, आज तयार छ',
+            ),
+            maxLines: 3,
+          ),
+          const SizedBox(height: 6),
+          _infoBox(),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isSaving ? null : _saveListing,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.add_business),
+              label: Text(
+                _isSaving
+                    ? AppLanguage.text('Saving...', 'सेभ हुँदैछ...')
+                    : AppLanguage.text('Create Listing', 'लिस्टिङ बनाउनुहोस्'),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imagePickerBox() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: _isPickingImage ? null : _showImagePickerSheet,
+      child: Container(
+        width: double.infinity,
+        height: 190,
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.green.withOpacity(0.18)),
+        ),
+        child: _selectedImageBytes == null
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_a_photo,
+                    color: Colors.green.shade700,
+                    size: 42,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    AppLanguage.text(
+                      'Tap to preview crop photo',
+                      'बालीको फोटो preview गर्न थिच्नुहोस्',
+                    ),
+                    style: TextStyle(
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    AppLanguage.text(
+                      'Optional preview only',
+                      'वैकल्पिक preview मात्र',
+                    ),
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
+              )
+            : Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Image.memory(
+                      _selectedImageBytes!,
+                      width: double.infinity,
+                      height: 190,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: CircleAvatar(
+                      backgroundColor: Colors.black.withOpacity(0.55),
+                      child: const Icon(Icons.edit, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _previewCard() {
+    final qualityText = AppLanguage.text(
+      _selectedQuality,
+      _qualityNe(_selectedQuality),
     );
 
-    final displayCrop = cleanCropName.isNotEmpty
-        ? cleanCropName
-        : cleanCropNameNe;
-
-    if (matches.length < 2) {
-      return MarketAiResult(
-        success: true,
-        marketAiStatus: 'not_enough_data',
-        marketAiMessage: 'Not enough saved market data.',
-        marketAiMessageNe: 'पर्याप्त सेभ गरिएको बजार डाटा छैन।',
-        aiMarketTitle: 'Not enough market records for $displayCrop',
-        aiMarketTitleNe: '$displayCrop को लागि पर्याप्त बजार रेकर्ड छैन',
-        aiMarketRisk: 'Need more market data',
-        aiMarketRiskNe: 'थप बजार डाटा चाहिन्छ',
-        aiMarketSummary:
-            'Your selling price is Rs. ${_formatPrice(price)}/$cleanUnit. I found only ${matches.length} saved matching market record for $displayCrop per $cleanUnit. Because there is not enough saved data, this app cannot give a reliable average price yet.',
-        aiMarketSummaryNe:
-            'तपाईंको बिक्री मूल्य रु. ${_formatPrice(price)}/$cleanUnit छ। $displayCrop प्रति $cleanUnit का लागि ${matches.length} वटा मात्र मिल्ने बजार रेकर्ड भेटियो। पर्याप्त डाटा नभएकाले अहिले भरपर्दो औसत मूल्य दिन सकिँदैन।',
-        aiMarketActions: [
-          'Add more real market prices for this crop and unit.',
-          'Check nearby market price manually before selling.',
-          'Include transport, packaging and freshness in final price.',
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(
+        color: Colors.white,
+        borderColor: Colors.green.withOpacity(0.10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.visibility,
+            title: AppLanguage.text('Listing Preview', 'लिस्टिङ पूर्वावलोकन'),
+          ),
+          const SizedBox(height: 12),
+          if (_selectedImageBytes != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.memory(
+                _selectedImageBytes!,
+                width: double.infinity,
+                height: 170,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              AppLanguage.text(
+                'Photo is preview only and will not be uploaded.',
+                'फोटो preview मात्र हो र upload हुँदैन।',
+              ),
+              style: const TextStyle(color: Colors.black54, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.green.shade50,
+                child: Icon(Icons.eco, color: Colors.green.shade700),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _cropDisplayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _priceText,
+                  style: TextStyle(
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _previewLine(
+            icon: Icons.scale,
+            label: AppLanguage.text('Quantity', 'मात्रा'),
+            value: _quantityText,
+          ),
+          _previewLine(
+            icon: Icons.verified,
+            label: AppLanguage.text('Quality', 'गुणस्तर'),
+            value: qualityText,
+          ),
+          _previewLine(
+            icon: Icons.place,
+            label: AppLanguage.text('Location', 'स्थान'),
+            value: _locationController.text.trim().isEmpty
+                ? AppLanguage.text('Location not added', 'स्थान थपिएको छैन')
+                : _locationController.text.trim(),
+          ),
+          _previewLine(
+            icon: Icons.phone,
+            label: AppLanguage.text('Contact', 'सम्पर्क'),
+            value: _contactController.text.trim().isEmpty
+                ? AppLanguage.text('Contact not added', 'सम्पर्क थपिएको छैन')
+                : _contactController.text.trim(),
+          ),
+          if (_noteController.text.trim().isNotEmpty)
+            _previewLine(
+              icon: Icons.note_alt,
+              label: AppLanguage.text('Note', 'नोट'),
+              value: _noteController.text.trim(),
+            ),
         ],
-        aiMarketActionsNe: [
-          'यो बाली र एकाइका लागि थप वास्तविक बजार मूल्य थप्नुहोस्।',
-          'बेच्नु अघि नजिकको बजार मूल्य आफैं जाँच गर्नुहोस्।',
-          'अन्तिम मूल्यमा ढुवानी, प्याकिङ र ताजापन पनि सोच्नुहोस्।',
-        ],
-      );
-    }
+      ),
+    );
+  }
 
-    double total = 0;
-
-    for (final item in matches) {
-      total += _toDouble(item['priceValue']);
-    }
-
-    final average = total / matches.length;
-    final difference = price - average;
-    final percentageDifference = average == 0
-        ? 0
-        : (difference / average) * 100;
-
-    if (percentageDifference >= 15) {
-      return MarketAiResult(
-        success: true,
-        marketAiStatus: 'above_average',
-        marketAiMessage: 'Price is above saved market average.',
-        marketAiMessageNe: 'मूल्य सेभ गरिएको बजार औसतभन्दा माथि छ।',
-        aiMarketTitle: '$displayCrop price is above saved market average',
-        aiMarketTitleNe:
-            '$displayCrop को मूल्य सेभ गरिएको बजार औसतभन्दा माथि छ',
-        aiMarketRisk: 'High price',
-        aiMarketRiskNe: 'उच्च मूल्य',
-        aiMarketSummary:
-            'Your price is Rs. ${_formatPrice(price)}/$cleanUnit. The saved market average for $displayCrop is around Rs. ${_formatPrice(average)}/$cleanUnit based on ${matches.length} saved records. Your price is about ${percentageDifference.toStringAsFixed(1)}% higher than the saved average.',
-        aiMarketSummaryNe:
-            'तपाईंको मूल्य रु. ${_formatPrice(price)}/$cleanUnit छ। ${matches.length} वटा सेभ रेकर्ड अनुसार $displayCrop को औसत बजार मूल्य करिब रु. ${_formatPrice(average)}/$cleanUnit छ। तपाईंको मूल्य सेभ औसतभन्दा करिब ${percentageDifference.toStringAsFixed(1)}% बढी छ।',
-        aiMarketActions: [
-          'Explain quality, freshness or transport cost to buyers.',
-          'Be ready for buyers to negotiate the price.',
-          'Lower the price if nearby markets are cheaper.',
-        ],
-        aiMarketActionsNe: [
-          'खरिदकर्तालाई गुणस्तर, ताजापन वा ढुवानी खर्च स्पष्ट गर्नुहोस्।',
-          'खरिदकर्ताले मूल्य घटाउन खोज्न सक्छन् भनेर तयार हुनुहोस्।',
-          'नजिकको बजार सस्तो छ भने मूल्य घटाउने सोच्नुहोस्।',
-        ],
-      );
-    }
-
-    if (percentageDifference <= -15) {
-      return MarketAiResult(
-        success: true,
-        marketAiStatus: 'below_average',
-        marketAiMessage: 'Price is below saved market average.',
-        marketAiMessageNe: 'मूल्य सेभ गरिएको बजार औसतभन्दा कम छ।',
-        aiMarketTitle: '$displayCrop price is below saved market average',
-        aiMarketTitleNe: '$displayCrop को मूल्य सेभ गरिएको बजार औसतभन्दा कम छ',
-        aiMarketRisk: 'Low price',
-        aiMarketRiskNe: 'कम मूल्य',
-        aiMarketSummary:
-            'Your price is Rs. ${_formatPrice(price)}/$cleanUnit. The saved market average for $displayCrop is around Rs. ${_formatPrice(average)}/$cleanUnit based on ${matches.length} saved records. Your price is about ${percentageDifference.abs().toStringAsFixed(1)}% lower than the saved average.',
-        aiMarketSummaryNe:
-            'तपाईंको मूल्य रु. ${_formatPrice(price)}/$cleanUnit छ। ${matches.length} वटा सेभ रेकर्ड अनुसार $displayCrop को औसत बजार मूल्य करिब रु. ${_formatPrice(average)}/$cleanUnit छ। तपाईंको मूल्य सेभ औसतभन्दा करिब ${percentageDifference.abs().toStringAsFixed(1)}% कम छ।',
-        aiMarketActions: [
-          'This price may sell faster.',
-          'Check your cost before selling too cheaply.',
-          'Increase price if crop quality and freshness are good.',
-        ],
-        aiMarketActionsNe: [
-          'यो मूल्यमा छिटो बिक्री हुन सक्छ।',
-          'धेरै सस्तो बेच्नु अघि आफ्नो लागत जाँच गर्नुहोस्।',
-          'गुणस्तर र ताजापन राम्रो छ भने मूल्य बढाउन सकिन्छ।',
-        ],
-      );
-    }
-
-    return MarketAiResult(
-      success: true,
-      marketAiStatus: 'near_average',
-      marketAiMessage: 'Price is close to saved market average.',
-      marketAiMessageNe: 'मूल्य सेभ गरिएको बजार औसत नजिक छ।',
-      aiMarketTitle: '$displayCrop price is close to saved market average',
-      aiMarketTitleNe: '$displayCrop को मूल्य सेभ गरिएको बजार औसत नजिक छ',
-      aiMarketRisk: 'Reasonable price',
-      aiMarketRiskNe: 'उचित मूल्य',
-      aiMarketSummary:
-          'Your price is Rs. ${_formatPrice(price)}/$cleanUnit. The saved market average for $displayCrop is around Rs. ${_formatPrice(average)}/$cleanUnit based on ${matches.length} saved records. This price looks reasonable compared with saved market data.',
-      aiMarketSummaryNe:
-          'तपाईंको मूल्य रु. ${_formatPrice(price)}/$cleanUnit छ। ${matches.length} वटा सेभ रेकर्ड अनुसार $displayCrop को औसत बजार मूल्य करिब रु. ${_formatPrice(average)}/$cleanUnit छ। सेभ गरिएको बजार डाटासँग तुलना गर्दा यो मूल्य उचित देखिन्छ।',
-      aiMarketActions: [
-        'Keep this price if crop quality is normal.',
-        'Mention freshness and pickup location clearly.',
-        'Still check nearby market price before final selling.',
+  Widget _sectionTitle({required IconData icon, required String title}) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.green.shade700, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+        ),
       ],
-      aiMarketActionsNe: [
-        'बालीको गुणस्तर सामान्य छ भने यो मूल्य राख्न सकिन्छ।',
-        'ताजापन र लिन आउने स्थान स्पष्ट लेख्नुहोस्।',
-        'अन्तिम बिक्री अघि नजिकको बजार मूल्य पनि जाँच गर्नुहोस्।',
+    );
+  }
+
+  Widget _infoBox() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.green.shade100),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.verified_user, color: Colors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              AppLanguage.text(
+                'Your active listing will appear in Marketplace. Buyers can contact you directly.',
+                'तपाईंको active लिस्टिङ Marketplace मा देखिनेछ। खरिदकर्ताले सिधै सम्पर्क गर्न सक्छन्।',
+              ),
+              style: const TextStyle(fontSize: 13, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewLine({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.black45, size: 18),
+          const SizedBox(width: 7),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              color: Colors.black54,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 13,
+                height: 1.25,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    String? hintText,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hintText,
+          prefixIcon: Icon(icon, color: Colors.green.shade700),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Colors.green.shade700, width: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required IconData icon,
+    required ValueChanged<String?> onChanged,
+    bool showNepaliQuality = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: Colors.green.shade700),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 16,
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Colors.green.shade700, width: 2),
+          ),
+        ),
+        items: items.map((item) {
+          final display = showNepaliQuality
+              ? AppLanguage.text(item, _qualityNe(item))
+              : item;
+
+          return DropdownMenuItem(
+            value: item,
+            child: Text(display, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  BoxDecoration _cardDecoration({
+    Color color = Colors.white,
+    Color? borderColor,
+  }) {
+    return BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(22),
+      border: borderColor == null ? null : Border.all(color: borderColor),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.06),
+          blurRadius: 14,
+          offset: const Offset(0, 6),
+        ),
       ],
     );
   }

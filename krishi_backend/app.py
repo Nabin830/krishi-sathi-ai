@@ -19,7 +19,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def home():
     return jsonify({
         "status": "running",
-        "message": "Krishi Sathi backend is running"
+        "message": "Krishi Sathi AI backend is running"
     })
 
 

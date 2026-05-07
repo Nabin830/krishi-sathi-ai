@@ -13,7 +13,7 @@ def fallback_ai_result(
     user_id: str,
     image_path: str,
     image_url: str = "",
-    reason: str = "Gemini AI is not connected yet.",
+    reason: str = " AI is not connected yet.",
 ):
     return {
         "success": True,

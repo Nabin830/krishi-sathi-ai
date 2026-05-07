@@ -150,7 +150,7 @@ def generate_weather_ai_summary(data: dict):
         client = genai.Client(api_key=api_key)
 
         prompt = f"""
-You are Krishi Sathi, a simple farming weather advisor for farmers in Nepal.
+You are Krishi Sathi AI, a simple farming weather advisor for farmers in Nepal.
 
 Create a short, clear weather farming summary in BOTH English and Nepali.
 

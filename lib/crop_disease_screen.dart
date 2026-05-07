@@ -8,7 +8,6 @@ import 'gemini_crop_ai_service.dart';
 import 'ai_diagnosis_service.dart';
 import 'app_language.dart';
 import 'image_upload_service.dart';
-import 'ai_backend_service.dart';
 
 class CropDiseaseScreen extends StatefulWidget {
   const CropDiseaseScreen({super.key});
