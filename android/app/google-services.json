@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "282393325743",
+    "project_id": "krishi-sathi-ai-47b12",
+    "storage_bucket": "krishi-sathi-ai-47b12.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:282393325743:android:a285a82f9d2c2c678aa45a",
+        "android_client_info": {
+          "package_name": "com.Narostack.krishi_sathi_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFHdwpJwPpTE4Susa-sjoChcGbdeVhhAA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:282393325743:android:7afca1201105dbac8aa45a",
+        "android_client_info": {
+          "package_name": "com.example.krishi_sathi_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFHdwpJwPpTE4Susa-sjoChcGbdeVhhAA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
